@@ -2,20 +2,20 @@ SELECT
   s.name, 
   s.address 
 FROM 
-  "${database}"."${schema}"."${prefix}supplier" s,
-  "${database}"."${schema}"."${prefix}nation" n
+  ${database}.${schema}.supplier s,
+  ${database}.${schema}.nation n
 WHERE 
   s.suppkey IN (
     SELECT 
       ps.suppkey 
     FROM 
-      "${database}"."${schema}"."${prefix}partsupp" ps
+      ${database}.${schema}.partsupp ps
     WHERE 
       ps.partkey IN (
         SELECT 
           p.partkey 
         FROM 
-          "${database}"."${schema}"."${prefix}part" p
+          ${database}.${schema}.part p
         WHERE 
           p.name like 'forest%'
       ) 
@@ -23,7 +23,7 @@ WHERE
         SELECT 
           0.5*sum(l.quantity) 
         FROM 
-          "${database}"."${schema}"."${prefix}lineitem" l
+          ${database}.${schema}.lineitem l
         WHERE 
           l.partkey = ps.partkey 
           AND l.suppkey = ps.suppkey 

@@ -8,14 +8,14 @@ FROM
       substr(c.phone,1,2) AS cntrycode,
       c.acctbal
     FROM 
-      "${database}"."${schema}"."${prefix}customer" c
+      ${database}.${schema}.customer c
     WHERE 
       substr(c.phone,1,2) IN ('13', '31', '23', '29', '30', '18', '17')
       AND c.acctbal > (
         SELECT 
           avg(c.acctbal) 
         FROM 
-          "${database}"."${schema}"."${prefix}customer" c
+          ${database}.${schema}.customer c
         WHERE 
           c.acctbal > 0.00 
           AND substr(c.phone,1,2) IN ('13', '31', '23', '29', '30', '18', '17')
@@ -24,7 +24,7 @@ FROM
         SELECT 
           * 
         FROM 
-          "${database}"."${schema}"."${prefix}orders" o
+          ${database}.${schema}.orders o
         WHERE 
           o.custkey = c.custkey
       )

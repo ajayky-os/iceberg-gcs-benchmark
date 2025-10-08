@@ -1,8 +1,8 @@
 SELECT 
   sum(l.extendedprice* (1 - l.discount)) as revenue
 FROM 
-  "${database}"."${schema}"."${prefix}lineitem" l,
-  "${database}"."${schema}"."${prefix}part" p
+  ${database}.${schema}.lineitem l,
+  ${database}.${schema}.part p
 WHERE
   p.partkey = l.partkey
   AND

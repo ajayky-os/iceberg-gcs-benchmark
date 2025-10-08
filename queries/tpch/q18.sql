@@ -6,14 +6,14 @@ SELECT
   o.totalprice,
   sum(l.quantity)
 FROM
-  "${database}"."${schema}"."${prefix}customer" AS c,
-  "${database}"."${schema}"."${prefix}orders" AS o,
-  "${database}"."${schema}"."${prefix}lineitem" AS l
+  ${database}.${schema}.customer AS c,
+  ${database}.${schema}.orders AS o,
+  ${database}.${schema}.lineitem AS l
 WHERE
   o.orderkey IN (
     SELECT l.orderkey
     FROM
-      "${database}"."${schema}"."${prefix}lineitem" AS l
+      ${database}.${schema}.lineitem AS l
     GROUP BY
       l.orderkey
     HAVING

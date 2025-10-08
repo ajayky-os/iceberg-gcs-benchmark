@@ -3,7 +3,7 @@ WITH revenue0 AS (
     l.suppkey as supplier_no,
     sum(l.extendedprice*(1-l.discount)) as total_revenue
   FROM 
-    "${database}"."${schema}"."${prefix}lineitem" l
+    ${database}.${schema}.lineitem l
   WHERE 
     l.shipdate >= DATE '1996-01-01'
     AND l.shipdate < DATE '1996-01-01' + INTERVAL '3' MONTH
@@ -19,7 +19,7 @@ SELECT
   s.phone, 
   total_revenue
 FROM 
-  "${database}"."${schema}"."${prefix}supplier" s,
+  ${database}.${schema}.supplier s,
   revenue0
 WHERE 
   s.suppkey = supplier_no 

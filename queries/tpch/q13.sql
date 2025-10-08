@@ -6,9 +6,9 @@ FROM (
     c.custkey, 
     count(o.orderkey)
   FROM 
-    "${database}"."${schema}"."${prefix}customer" c
+    ${database}.${schema}.customer c
     LEFT OUTER JOIN
-    "${database}"."${schema}"."${prefix}orders" o
+    ${database}.${schema}.orders o
   ON 
     c.custkey = o.custkey
     AND o.comment NOT LIKE '%special%requests%'
