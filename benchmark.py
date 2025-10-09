@@ -15,7 +15,7 @@ class BenchmarkRunner:
     and log the execution results into an Apache Iceberg table.
     """
 
-    def __init__(self, spark: SparkSession, results_table: str, db_name: str):
+    def __init__(self, spark: SparkSession, results_table: str):
         """
         Initializes the BenchmarkRunner.
 
@@ -26,7 +26,6 @@ class BenchmarkRunner:
         """
         self.spark = spark
         self.results_table_name = results_table
-        self.db_name = db_name
         self.run_id = str(uuid.uuid4())
         print(f"Initialized new benchmark run with ID: {self.run_id}")
 
@@ -52,7 +51,7 @@ class BenchmarkRunner:
         self.spark.sql(create_table_sql)
         print(f"Table '{self.results_table_name}' is ready.")
 
-    def _log_result(self, benchmark_type: str, query_name: str, duration_sec: float,
+    def _log_result(self, db_name: str, benchmark_type: str, query_name: str, duration_sec: float,
                     status: str, error_msg: str = None):
         """
         Logs a single query result to the Iceberg results table.
@@ -70,7 +69,7 @@ class BenchmarkRunner:
 
         data = [(
             self.run_id,
-            self.db_name,
+            db_name,
             benchmark_type,
             query_name,
             duration_sec,
@@ -85,7 +84,7 @@ class BenchmarkRunner:
         result_df.writeTo(self.results_table_name).append()
         print(f"  -> Logged result for {query_name}: {status}")
 
-    def run_benchmark(self, benchmark_name: str, queries_path: str):
+    def run_benchmark(self, benchmark_name: str, queries_path: str, db_name: str):
         """
         Executes all .sql files in a given directory for a specific benchmark.
 
@@ -98,8 +97,8 @@ class BenchmarkRunner:
             return
 
         # Use the specified database for the queries
-        self.spark.sql(f"USE gcs_prod.{self.db_name}")
-        print(f"\nSwitched to database: '{self.db_name}' for {benchmark_name} queries.")
+        self.spark.sql(f"USE gcs_prod.{db_name}")
+        print(f"\nSwitched to database: '{db_name}' for {benchmark_name} queries.")
 
         sql_files = sorted(list(query_dir.glob('*.sql')))
         print(f"Found {len(sql_files)} queries for benchmark '{benchmark_name}' in '{queries_path}'.")
@@ -110,7 +109,7 @@ class BenchmarkRunner:
             query_sql = ""
             with open(sql_file, 'r') as f:
                 query_sql = f.read()
-            query_sql = query_sql.replace("${database}","gcs_prod").replace("${schema}", self.db_name)
+            query_sql = query_sql.replace("${database}","gcs_prod").replace("${schema}", db_name)
             start_time = time.time()
             status = "SUCCESS"
             error_message = None
@@ -128,14 +127,15 @@ class BenchmarkRunner:
             finally:
                 end_time = time.time()
                 duration = end_time - start_time
-                self._log_result(benchmark_name, query_name, duration, status, error_message)
+                self._log_result(db_name, benchmark_name, query_name, duration, status, error_message)
 
 
 def main():
     parser = argparse.ArgumentParser(description="Run Spark SQL Benchmarks and log to Iceberg.")
     parser.add_argument("--tpcds-dir", required=True, help="Path to the directory with TPC-DS .sql queries.")
     parser.add_argument("--tpch-dir", required=True, help="Path to the directory with TPC-H .sql queries.")
-    parser.add_argument("--data-db", required=True, help="Database/schema where TPC data is located (e.g., tpcds_sf100).")
+    parser.add_argument("--tpcds-data-db", required=True, help="Database/schema where TPC data is located (e.g., tpcds_sf100).")
+    parser.add_argument("--tpch-data-db", required=True, help="Database/schema where TPC data is located (e.g., tpcds_sf100).")
     parser.add_argument("--catalog-name", required=True, help="Name of the Iceberg catalog configured in Spark (e.g., gcs_catalog).")
     parser.add_argument("--results-db", required=True, help="Database/schema within the catalog to store results.")
     args = parser.parse_args()
@@ -152,14 +152,15 @@ def main():
 
     results_table_fqn = f"{args.catalog_name}.{args.results_db}.benchmark_results"
 
-    runner = BenchmarkRunner(spark, results_table_fqn, args.data_db)
+    runner = BenchmarkRunner(spark, results_table_fqn)
     runner.ensure_results_table_exists()
 
     # Run TPC-DS queries
-    # runner.run_benchmark("TPC-DS", args.tpcds_dir)
+    # runner.run_benchmark("TPC-DS", args.tpcds_dir, args.tpcds_data_db)
 
     # Run TPC-H queries
-    runner.run_benchmark("TPC-H", args.tpch_dir)
+    for i in range(3):
+        runner.run_benchmark("TPC-H", args.tpch_dir, args.tpch_data_db)
 
     print("\nBenchmark run completed.")
     spark.stop()
