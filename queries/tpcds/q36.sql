@@ -5,10 +5,10 @@ SELECT
 , (GROUPING (i_category) + GROUPING (i_class)) lochierarchy
 , rank() OVER (PARTITION BY (GROUPING (i_category) + GROUPING (i_class)), (CASE WHEN (GROUPING (i_class) = 0) THEN i_category END) ORDER BY (sum(ss_net_profit) / sum(ss_ext_sales_price)) ASC) rank_within_parent
 FROM
-  gcs_prod.tpcds_sf100.store_sales
-, gcs_prod.tpcds_sf100.date_dim d1
-, gcs_prod.tpcds_sf100.item
-, gcs_prod.tpcds_sf100.store
+  ${database}.${schema}.store_sales
+, ${database}.${schema}.date_dim d1
+, ${database}.${schema}.item
+, ${database}.${schema}.store
 WHERE (d1.d_year = 2001)
    AND (d1.d_date_sk = ss_sold_date_sk)
    AND (i_item_sk = ss_item_sk)

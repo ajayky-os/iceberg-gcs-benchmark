@@ -2,6 +2,7 @@ import argparse
 import time
 import uuid
 from pathlib import Path
+import json
 
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col
@@ -16,17 +17,18 @@ class BenchmarkRunner:
     and log the execution results into an Apache Iceberg table.
     """
 
-    def __init__(self, spark: SparkSession, results_table: str):
+    def __init__(self, spark: SparkSession, results_table: str, catalog_name: str):
         """
         Initializes the BenchmarkRunner.
 
         :param spark: An active SparkSession.
         :param results_table: The fully qualified name of the Iceberg table for results
-                              (e.g., 'my_catalog.db.results').
-        :param db_name: The name of the database/schema containing the TPC data tables.
+                              (e.g., 'my_catalog.db.benchmark_results').
+        :param catalog_name: The name of the catalog to use.
         """
         self.spark = spark
         self.results_table_name = results_table
+        self.catalog_name = catalog_name
         self.run_id = str(uuid.uuid4())
         print(f"Initialized new benchmark run with ID: {self.run_id}")
 
@@ -104,7 +106,12 @@ class BenchmarkRunner:
             print(f"Warning: Directory not found, skipping benchmark: {queries_path}")
             return
 
+        # Use the specified database for the queries
+        self.spark.sql(f"USE {self.catalog_name}.{db_name}")
         print(f"\nSwitched to database: '{db_name}' for {benchmark_name} queries.")
+
+        print(f"Clearing Spark cache before running {benchmark_name}...")
+        self.spark.catalog.clearCache()
 
         stagemetrics = StageMetrics(self.spark)
         analytics_core_enabled = self.spark.conf.get("spark.sql.catalog.gcs_prod.gcs.analytics.core.enabled", "false").lower() == "true"
@@ -124,7 +131,6 @@ class BenchmarkRunner:
             error_message = None
             duration = 0.0
             metrics_json = None
-
             try:
                 stagemetrics.begin()
                 # To force execution, we call an action. .collect() is simple.
@@ -132,7 +138,10 @@ class BenchmarkRunner:
                 # .write.format('noop') is a clean way to trigger execution without producing output.
                 self.spark.sql(query_sql).write.format("noop").mode("overwrite").save()
                 stagemetrics.end()
-                metrics_json = stagemetrics.to_json()
+                metrics = stagemetrics.aggregate_stagemetrics()
+                # Convert JavaMap to Python dict
+                python_metrics = {k: v for k, v in metrics.items()}
+                metrics_json = json.dumps(python_metrics)
             except Exception as e:
                 status = "FAILED"
                 error_message = str(e)[:2000] # Truncate long error messages
@@ -156,26 +165,25 @@ def main():
     parser.add_argument("--results-db", required=True, help="Database/schema within the catalog to store results.")
     args = parser.parse_args()
 
-    # --- Spark Session Initialization with Iceberg and GCS Support ---
-    # This configuration is an example. Adjust for your environment (e.g., different catalog, warehouse path).
     spark = (
         SparkSession.builder
         .appName("Iceberg Benchmark Runner")
-        # Enable dynamic partition overwrites, which is good practice for Iceberg
         .config("spark.sql.sources.partitionOverwriteMode", "dynamic")
         .getOrCreate()
     )
 
-    results_table_fqn = f"{args.catalog_name}.{args.results_db}.results"
+    results_table_fqn = f"{args.catalog_name}.{args.results_db}.benchmark_results"
 
-    runner = BenchmarkRunner(spark, results_table_fqn)
+    runner = BenchmarkRunner(spark, results_table_fqn, args.catalog_name)
     runner.ensure_results_table_exists()
 
     # Run TPC-DS queries
-    runner.run_benchmark("TPC-DS", args.tpcds_dir, args.tpcds_data_db)
+    for i in range(3):
+        runner.run_benchmark("TPC-DS", args.tpcds_dir, args.tpcds_data_db)
 
     # Run TPC-H queries
-    runner.run_benchmark("TPC-H", args.tpch_dir, args.tpch_data_db)
+    for i in range(3):
+        runner.run_benchmark("TPC-H", args.tpch_dir, args.tpch_data_db)
 
     print("\nBenchmark run completed.")
     spark.stop()

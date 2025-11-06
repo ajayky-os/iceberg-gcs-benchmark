@@ -7,9 +7,9 @@ SELECT
 , sum(ws_ext_sales_price) itemrevenue
 , ((sum(ws_ext_sales_price) * 100) / sum(sum(ws_ext_sales_price)) OVER (PARTITION BY i_class)) revenueratio
 FROM
-  gcs_prod.tpcds_sf1.web_sales
-, gcs_prod.tpcds_sf1.item
-, gcs_prod.tpcds_sf1.date_dim
+  ${database}.${schema}.web_sales
+, ${database}.${schema}.item
+, ${database}.${schema}.date_dim
 WHERE (ws_item_sk = i_item_sk)
    AND (i_category IN ('Sports', 'Books', 'Home'))
    AND (ws_sold_date_sk = d_date_sk)
