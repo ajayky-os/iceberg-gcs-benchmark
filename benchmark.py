@@ -6,8 +6,9 @@ from pathlib import Path
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col
 from pyspark.sql.types import (StringType, DoubleType, StructField,
-                               StructType, TimestampType)
+                               StructType, TimestampType, BooleanType)
 from datetime import datetime
+from sparkmeasure import StageMetrics
 
 class BenchmarkRunner:
     """
@@ -21,7 +22,7 @@ class BenchmarkRunner:
 
         :param spark: An active SparkSession.
         :param results_table: The fully qualified name of the Iceberg table for results
-                              (e.g., 'my_catalog.db.benchmark_results').
+                              (e.g., 'my_catalog.db.results').
         :param db_name: The name of the database/schema containing the TPC data tables.
         """
         self.spark = spark
@@ -42,9 +43,12 @@ class BenchmarkRunner:
             query_name STRING,
             execution_time_sec DOUBLE,
             status STRING,
-            error_message STRING,
-            timestamp TIMESTAMP
-        )
+            
+                        error_message STRING,
+                        metrics_json STRING,
+                        analytics_core_enabled BOOLEAN,
+                        timestamp TIMESTAMP
+                    )
         USING iceberg
         PARTITIONED BY (days(timestamp), benchmark_type)
         """
@@ -52,7 +56,7 @@ class BenchmarkRunner:
         print(f"Table '{self.results_table_name}' is ready.")
 
     def _log_result(self, db_name: str, benchmark_type: str, query_name: str, duration_sec: float,
-                    status: str, error_msg: str = None):
+                    status: str, error_msg: str = None, metrics_json: str = None, analytics_core_enabled: bool = False):
         """
         Logs a single query result to the Iceberg results table.
         """
@@ -64,6 +68,8 @@ class BenchmarkRunner:
             StructField("execution_time_sec", DoubleType(), True),
             StructField("status", StringType(), False),
             StructField("error_message", StringType(), True),
+            StructField("metrics_json", StringType(), True),
+            StructField("analytics_core_enabled", BooleanType(), True),
             StructField("timestamp", TimestampType(), False)
         ])
 
@@ -75,6 +81,8 @@ class BenchmarkRunner:
             duration_sec,
             status,
             error_msg,
+            metrics_json,
+            analytics_core_enabled,
             datetime.now()
         )]
 
@@ -96,9 +104,10 @@ class BenchmarkRunner:
             print(f"Warning: Directory not found, skipping benchmark: {queries_path}")
             return
 
-        # Use the specified database for the queries
-        self.spark.sql(f"USE gcs_prod.{db_name}")
         print(f"\nSwitched to database: '{db_name}' for {benchmark_name} queries.")
+
+        stagemetrics = StageMetrics(self.spark)
+        analytics_core_enabled = self.spark.conf.get("spark.sql.catalog.gcs_prod.gcs.analytics.core.enabled", "false").lower() == "true"
 
         sql_files = sorted(list(query_dir.glob('*.sql')))
         print(f"Found {len(sql_files)} queries for benchmark '{benchmark_name}' in '{queries_path}'.")
@@ -114,20 +123,27 @@ class BenchmarkRunner:
             status = "SUCCESS"
             error_message = None
             duration = 0.0
+            metrics_json = None
 
             try:
+                stagemetrics.begin()
                 # To force execution, we call an action. .collect() is simple.
                 # For queries with large result sets, a more robust action is to write the output.
                 # .write.format('noop') is a clean way to trigger execution without producing output.
                 self.spark.sql(query_sql).write.format("noop").mode("overwrite").save()
+                stagemetrics.end()
+                metrics_json = stagemetrics.to_json()
             except Exception as e:
                 status = "FAILED"
                 error_message = str(e)[:2000] # Truncate long error messages
                 print(f"  -> FAILED: {query_name}. Error: {error_message}")
+
+
             finally:
                 end_time = time.time()
                 duration = end_time - start_time
-                self._log_result(db_name, benchmark_name, query_name, duration, status, error_message)
+                self._log_result(db_name, benchmark_name, query_name, duration, status, error_message, metrics_json, analytics_core_enabled)
+
 
 
 def main():
@@ -150,17 +166,16 @@ def main():
         .getOrCreate()
     )
 
-    results_table_fqn = f"{args.catalog_name}.{args.results_db}.benchmark_results"
+    results_table_fqn = f"{args.catalog_name}.{args.results_db}.results"
 
     runner = BenchmarkRunner(spark, results_table_fqn)
     runner.ensure_results_table_exists()
 
     # Run TPC-DS queries
-    # runner.run_benchmark("TPC-DS", args.tpcds_dir, args.tpcds_data_db)
+    runner.run_benchmark("TPC-DS", args.tpcds_dir, args.tpcds_data_db)
 
     # Run TPC-H queries
-    for i in range(3):
-        runner.run_benchmark("TPC-H", args.tpch_dir, args.tpch_data_db)
+    runner.run_benchmark("TPC-H", args.tpch_dir, args.tpch_data_db)
 
     print("\nBenchmark run completed.")
     spark.stop()

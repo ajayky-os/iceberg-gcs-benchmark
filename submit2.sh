@@ -3,9 +3,9 @@ export SPARK_HOME=/opt/spark
 export ICEBERG_SPARK_JAR="gs://ajayky-asia/jars/iceberg-spark-runtime-4.0_2.13-1.11.0-SNAPSHOT.jar,gs://ajayky-asia/jars/iceberg-gcp-bundle-1.11.0-SNAPSHOT.jar"
 
 CATALOG_NAME="gcs_prod"
-TPCDS_DATA_DB="tpcds_sf1"
-TPCH_DATA_DB="tpch_sf1"
-RESULTS_DB="fileio_results"
+TPCDS_DATA_DB="tpcds_sf100"
+TPCH_DATA_DB="tpch_sf100"
+RESULTS_DB="benchmarks"
 
 # The spark-submit command
 $SPARK_HOME/bin/spark-submit \
