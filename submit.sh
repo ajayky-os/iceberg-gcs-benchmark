@@ -12,6 +12,8 @@ RESULTS_DB="analytics_core_results"
 $SPARK_HOME/bin/spark-submit \
   --master spark://10.182.0.17:7077 \
   --jars $ICEBERG_SPARK_JAR \
+  --packages ch.cern.sparkmeasure:spark-measure_2.13:0.27 \
+  --conf spark.hadoop.hive.cli.print.header=true \
   --conf spark.sql.extensions=org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions \
   --conf spark.sql.catalog.gcs_prod=org.apache.iceberg.spark.SparkCatalog  \
   --conf spark.sql.catalog.gcs_prod.type=hadoop  \
