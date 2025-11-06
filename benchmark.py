@@ -110,9 +110,6 @@ class BenchmarkRunner:
         self.spark.sql(f"USE {self.catalog_name}.{db_name}")
         print(f"\nSwitched to database: '{db_name}' for {benchmark_name} queries.")
 
-        print(f"Clearing Spark cache before running {benchmark_name}...")
-        self.spark.catalog.clearCache()
-
         stagemetrics = StageMetrics(self.spark)
         analytics_core_enabled = self.spark.conf.get("spark.sql.catalog.gcs_prod.gcs.analytics.core.enabled", "false").lower() == "true"
 
@@ -132,6 +129,8 @@ class BenchmarkRunner:
             duration = 0.0
             metrics_json = None
             try:
+                print(f"Clearing Spark cache before running {benchmark_name}...")
+                self.spark.catalog.clearCache()
                 stagemetrics.begin()
                 # To force execution, we call an action. .collect() is simple.
                 # For queries with large result sets, a more robust action is to write the output.
@@ -178,12 +177,10 @@ def main():
     runner.ensure_results_table_exists()
 
     # Run TPC-DS queries
-    for i in range(3):
-        runner.run_benchmark("TPC-DS", args.tpcds_dir, args.tpcds_data_db)
+    runner.run_benchmark("TPC-DS", args.tpcds_dir, args.tpcds_data_db)
 
     # Run TPC-H queries
-    for i in range(3):
-        runner.run_benchmark("TPC-H", args.tpch_dir, args.tpch_data_db)
+    runner.run_benchmark("TPC-H", args.tpch_dir, args.tpch_data_db)
 
     print("\nBenchmark run completed.")
     spark.stop()
